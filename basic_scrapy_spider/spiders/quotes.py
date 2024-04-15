@@ -20,6 +20,7 @@ class QuotesSpider(scrapy.Spider):
 
     custom_settings = {
          "PLAYWRIGHT_ABORT_REQUEST" : abort_req
+         
     }
 
     def start_requests(self):
@@ -46,19 +47,7 @@ class QuotesSpider(scrapy.Spider):
         page = response.meta["playwright_page"]
         await page.close()
 
-        # print(response.css(".data"))
         companies = response.css(".data")
-        # bus_urls = response.css(".data > div > a ::attr(href)").getall()
-        response.css("#companyResults a")
-        print("##########################    Company Results #####################################")
-        # print(len(compres))
-        # print(companies)
-
-        # page_number = response.meta["page_number"]
-
-        
-        # print(next_url)
-
         page_url = response.url
         parsed_url = urlparse(page_url)
         query_params = parse_qs(parsed_url.query)
@@ -67,49 +56,40 @@ class QuotesSpider(scrapy.Spider):
         for i, comp in enumerate(companies):
 
             bus_url = comp.css("div > a ::attr(href)").get()
-            # print(bus_url)
             revenue_text = comp.css('.col-md-2.last').extract()
             revenue_html = revenue_text[0]
-            revenue_value = revenue_html.split("$")[-1].strip().rstrip("</div>")
+            
+            # Extract revenue value and remove "M" suffix if present
+            revenue_str = revenue_html.split("$")[-1].strip().rstrip("</div>")
+            if "M" in revenue_str:
+                revenue_value = float(revenue_str.replace('M', ''))
+            else:
+                revenue_value = float(revenue_str)
 
             location_html = comp.css("div.col-md-4").extract_first()
             location = "".join(comp.css("div.col-md-4 *::text").getall()).strip()
 
             business_url = "https://www.dnb.com" + bus_url
-            print("location")
-            print(location)
+            print("Location:", location)
+            print("Revenue Value:", revenue_value)
 
+            # Define revenue threshold range
+            min_threshold = 3.5
+            max_threshold = 600
 
-            if comp == companies[3]:
-                break
+            # Check if revenue value lies within the threshold range
+            if min_threshold <= revenue_value <= max_threshold:
+                yield scrapy.Request(url=business_url, meta=dict(
+                    playwright=True,
+                    page_number=page_number,
+                    revenue_text=revenue_value,
+                    location=location,
+                    playwright_include_page=True,
+                    playwright_page_methods=[
+                        PageMethod('wait_for_selector', 'div#company_profile_snapshot')
+                    ]
+                ), callback=self.parse)
 
-            # # print(revenue_value)
-
-            # if i < 44:
-            #     pass
-
-
-            
-            
-            yield scrapy.Request(url=business_url, meta=dict(
-                playwright = True,
-                page_number = page_number,
-                revenue_text = revenue_value,
-                location = location,
-                playwright_include_page = True,
-
-
-                playwright_page_methods = [
-                     
-
-                     PageMethod('wait_for_selector', 'div#company_profile_snapshot'),
-                    # PageMethod("wait_for_timeout", 16000),
-
-                    # PageMethod("evaluate", "window.scrollTo(0, document.body.scrollHeight);")
-                    # PageMethod("evaluate", "window.scrollTo(0, document.body.scrollHeight);")
-                ]
-
-            ), callback=self.parse)
 
 
 
